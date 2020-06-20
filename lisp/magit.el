@@ -254,7 +254,8 @@ and/or `magit-branch-remote-head'."
     ("Y" "Cherries"       magit-cherry)
     ("z" "Stash"          magit-stash)
     ("!" "Run"            magit-run)
-    ("%" "Worktree"       magit-worktree)]]
+    ("%" "Worktree"       magit-worktree)
+    ("/" "Parent"         magit-submodule-visit-parent)]]
   ["Applying changes"
    :if-derived magit-mode
    [("a" "Apply"          magit-apply)

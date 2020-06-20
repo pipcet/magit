@@ -354,6 +354,7 @@ recommended value."
     (define-key map "0"         'magit-diff-default-context)
     (define-key map "$" 'magit-process-buffer)
     (define-key map "%" 'magit-worktree)
+    (define-key map "/" 'magit-submodule-visit-parent)
     (define-key map "a" 'magit-cherry-apply)
     (define-key map "A" 'magit-cherry-pick)
     (define-key map "b" 'magit-branch)

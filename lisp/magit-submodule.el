@@ -511,6 +511,11 @@ With a prefix argument, visit in another window."
        ((file-exists-p path)
         (dired-jump other-window (concat path "/.")))))))
 
+(defun magit-submodule-visit-parent ()
+  "Visit the current repository's parent, if it exists."
+  (interactive)
+  (magit-status (magit-git-string "rev-parse" "--show-superproject-working-tree")))
+
 ;;;###autoload
 (defun magit-insert-modules-unpulled-from-upstream ()
   "Insert sections for modules that haven't been pulled from the upstream.
