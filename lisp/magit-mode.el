@@ -688,7 +688,7 @@ and `magit-post-display-buffer-hook'."
               '(display-buffer-same-window)
             nil))) ; display in another window
 
-(defun magit-display-buffer-same-window-except-diff-v1 (buffer)
+(defun magit-display-buffer-same-window-except-process-v1 (buffer)
   "Display BUFFER in the selected window except for some modes.
 If a buffer's `major-mode' derives from `magit-diff-mode' or
 `magit-process-mode', display it in another window.  Display all
