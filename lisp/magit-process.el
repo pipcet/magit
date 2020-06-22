@@ -319,6 +319,21 @@ optional NODISPLAY is non-nil also display it."
         (magit-display-buffer buffer))
       buffer)))
 
+(defun magit-process-wait ()
+  (interactive)
+  (with-temp-buffer
+    (magit-process-buffer)
+    (goto-char (point-max))
+    (forward-line -2)
+    (magit-process-wait-at-point)))
+
+(defun magit-process-wait-at-point ()
+  (message "waiting for %S" (magit-section-value-if 'process))
+  (when-let ((process (magit-section-value-if 'process)))
+    (while (eq (process-status process) 'run)
+      (accept-process-output))
+    (message "state now %S" (process-status process))))
+
 (defun magit-process-kill ()
   "Kill the process at point."
   (interactive)

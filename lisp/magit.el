@@ -255,6 +255,7 @@ and/or `magit-branch-remote-head'."
     ("z" "Stash"          magit-stash)
     ("!" "Run"            magit-run)
     ("%" "Worktree"       magit-worktree)
+    ("#" "Wait"           magit-process-wait)
     ("/" "Parent"         magit-submodule-visit-parent)]]
   ["Applying changes"
    :if-derived magit-mode
