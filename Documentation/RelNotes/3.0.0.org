@@ -85,6 +85,9 @@
   to drop such commits, then you have to enable ~--autosquash~ in the
   popup and then invoke ~magit-rebase-interactive~.  #3670
 
+- ~magit-rebase-remove-commit~ now supports removing the ~HEAD~
+  commit.  #4195
+
 - The option ~magit-repository-directories~ defaults to ~nil~ again
   because the non-nil default added in v2.90.0 led to surprising
   changes in behavior.  The documentation of this option and the
@@ -138,6 +141,10 @@
 - New command ~git-rebase-break~ inserts a "break" action in the
   rebase to-do sequence (available as of Git v2.20).  #3762
 
+- ~git-rebase-kill-line~ and the commands for changing the action of a
+  commit line (e.g., ~git-rebase-squash~) learned to work on all lines
+  selected by the region.  #4172
+
 - The ~--color-moved~ diff argument is supported now, but isn't
   available from the diff transients by default.  To enable it
   use "C-x l" in those transients.  #3424
@@ -178,6 +185,10 @@
 - TODO Added basic support for libgit2.  #3841
 
 - ~git bisect~ is now run asynchronously.  #3802
+
+- ~magit-bisect~ now supports specifying alternate terms.  The new
+  infixes and suffix related to this functionality are disabled by
+  default.
 
 - ~magit-branch-or-commit-at-point~ now falls back to an abbreviated
   hash instead of something like "master~2", because the latter often

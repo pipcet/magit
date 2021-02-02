@@ -1,6 +1,6 @@
 ;;; magit-sequence.el --- history manipulation in Magit  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2011-2020  The Magit Project Contributors
+;; Copyright (C) 2011-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -28,9 +28,6 @@
 ;; `rebase--interactive' and `am'.
 
 ;;; Code:
-
-(eval-when-compile
-  (require 'subr-x))
 
 (require 'magit)
 
@@ -503,6 +500,8 @@ This discards all changes made since the sequence started."
    ("-k" "Keep empty commits"       "--keep-empty")
    ("-p" "Preserve merges"          ("-p" "--preserve-merges"))
    (7 magit-merge:--strategy)
+   (7 magit-merge:--strategy-option)
+   (7 "=X" magit-diff:--diff-algorithm :argument "-Xdiff-algorithm=")
    ("-d" "Lie about committer date" "--committer-date-is-author-date")
    ("-a" "Autosquash"               "--autosquash")
    ("-A" "Autostash"                "--autostash")
@@ -667,8 +666,13 @@ START has to be selected from a list of recent commits."
                                  (unless (member "--root" args) commit)))
     (magit-log-select
       `(lambda (commit)
-         (magit-rebase-interactive-1 commit (list ,@args)
-           ,message ,editor ,delay-edit-confirm ,noassert))
+         ;; In some cases (currently just magit-rebase-remove-commit), "-c
+         ;; commentChar=#" is added to the global arguments for git.  Ensure
+         ;; that the same happens when we chose the commit via
+         ;; magit-log-select, below.
+         (let ((magit-git-global-arguments (list ,@magit-git-global-arguments)))
+           (magit-rebase-interactive-1 commit (list ,@args)
+             ,message ,editor ,delay-edit-confirm ,noassert)))
       message)))
 
 (defvar magit--rebase-published-symbol nil)
@@ -753,10 +757,14 @@ START has to be selected from a list of recent commits."
   "Remove a single older commit using rebase."
   (interactive (list (magit-commit-at-point)
                      (magit-rebase-arguments)))
-  (magit-rebase-interactive-1 commit args
-    "Type %p on a commit to remove it,"
-    (apply-partially #'magit-rebase--perl-editor 'remove)
-    nil nil t))
+  ;; magit-rebase--perl-editor assumes that the comment character is "#".
+  (let ((magit-git-global-arguments
+         (nconc (list "-c" "core.commentChar=#")
+                magit-git-global-arguments)))
+    (magit-rebase-interactive-1 commit args
+      "Type %p on a commit to remove it,"
+      (apply-partially #'magit-rebase--perl-editor 'remove)
+      nil nil t)))
 
 (defun magit-rebase--perl-editor (action since)
   (let ((commit (magit-rev-abbrev (magit-rebase--target-commit since))))
@@ -765,7 +773,7 @@ START has to be selected from a list of recent commits."
             commit
             (cl-case action
               (edit   "edit")
-              (remove "# pick")
+              (remove "noop\n# pick")
               (reword "reword")
               (t      (error "unknown action: %s" action)))
             commit)))
@@ -900,8 +908,12 @@ If no such sequence is in progress, do nothing."
   (when (magit-rebase-in-progress-p)
     (let* ((interactive (file-directory-p (magit-git-dir "rebase-merge")))
            (dir  (if interactive "rebase-merge/" "rebase-apply/"))
-           (name (-> (concat dir "head-name") magit-git-dir magit-file-line))
-           (onto (-> (concat dir "onto")      magit-git-dir magit-file-line))
+           (name (thread-first (concat dir "head-name")
+                   magit-git-dir
+                   magit-file-line))
+           (onto (thread-first (concat dir "onto")
+                   magit-git-dir
+                   magit-file-line))
            (onto (or (magit-rev-name onto name)
                      (magit-rev-name onto "refs/heads/*") onto))
            (name (or (magit-rev-name name "refs/heads/*") name)))

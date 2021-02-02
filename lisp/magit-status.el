@@ -1,6 +1,6 @@
 ;;; magit-status.el --- the grand overview  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2010-2020  The Magit Project Contributors
+;; Copyright (C) 2010-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -26,9 +26,6 @@
 ;; This library implements the status buffer.
 
 ;;; Code:
-
-(eval-when-compile
-  (require 'subr-x))
 
 (require 'magit)
 
@@ -176,6 +173,33 @@ AUTHOR-WIDTH has to be an integer.  When the name of the author
   :set-after '(magit-log-margin)
   :set (apply-partially #'magit-margin-set-variable 'magit-status-mode))
 
+(defcustom magit-status-use-buffer-arguments 'selected
+  "Whether `magit-status' reuses arguments when the buffer already exists.
+
+This option has no effect when merely refreshing the status
+buffer using `magit-refresh'.
+
+Valid values are:
+
+`always': Always use the set of arguments that is currently
+  active in the status buffer, provided that buffer exists
+  of course.
+`selected': Use the set of arguments from the status
+  buffer, but only if it is displayed in a window of the
+  current frame.  This is the default.
+`current': Use the set of arguments from the status buffer,
+  but only if it is the current buffer.
+`never': Never use the set of arguments from the status
+  buffer."
+  :package-version '(magit . "3.0.0")
+  :group 'magit-buffers
+  :group 'magit-commands
+  :type '(choice
+          (const :tag "always use args from buffer" always)
+          (const :tag "use args from buffer if displayed in frame" selected)
+          (const :tag "use args from buffer if it is current" current)
+          (const :tag "never use args from buffer" never)))
+
 ;;; Commands
 
 ;;;###autoload
@@ -290,7 +314,7 @@ also contains other useful hints.")
       (if-let ((version (let ((default-directory directory))
                           (magit-git-version))))
           (if (version<= magit--minimal-git version)
-              (push version magit--remotes-using-recent-git)
+              (push remote magit--remotes-using-recent-git)
             (display-warning 'magit (format "\
 Magit requires Git >= %s, but on %s the version is %s.
 
@@ -403,8 +427,10 @@ Type \\[magit-commit] to create a commit.
     (setq directory default-directory))
   (magit--tramp-asserts directory)
   (let* ((default-directory directory)
-         (d (magit-diff--get-value 'magit-status-mode))
-         (l (magit-log--get-value  'magit-status-mode))
+         (d (magit-diff--get-value 'magit-status-mode
+                                   magit-status-use-buffer-arguments))
+         (l (magit-log--get-value 'magit-status-mode
+                                  magit-status-use-buffer-arguments))
          (file (and magit-status-goto-file-position
                     (magit-file-relative-name)))
          (line (and file (line-number-at-pos)))

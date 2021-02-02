@@ -1,6 +1,6 @@
 ;;; magit-mode.el --- create and refresh Magit buffers  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2010-2020  The Magit Project Contributors
+;; Copyright (C) 2010-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -29,16 +29,12 @@
 
 ;;; Code:
 
-(require 'cl-lib)
-(require 'dash)
-
-(eval-when-compile
-  (require 'subr-x))
-
-(require 'transient)
-
 (require 'magit-section)
 (require 'magit-git)
+
+(require 'format-spec)
+(require 'help-mode)
+(require 'transient)
 
 ;; For `magit-display-buffer-fullcolumn-most-v1' from `git-commit'
 (defvar git-commit-mode)
@@ -56,9 +52,6 @@
 (declare-function magit-status-goto-initial-section "magit-status" ())
 ;; For `magit-mode' from `bookmark'
 (defvar bookmark-make-record-function)
-
-(require 'format-spec)
-(require 'help-mode)
 
 ;;; Options
 
@@ -235,6 +228,8 @@ and Buffer Arguments'."
   :package-version '(magit . "3.0.0")
   :group 'magit-buffers
   :group 'magit-commands
+  :group 'magit-diff
+  :group 'magit-log
   :type '(choice
           (const :tag "always use args from buffer" always)
           (const :tag "use args from buffer if displayed in frame" selected)
@@ -266,6 +261,8 @@ and Buffer Arguments'."
   :package-version '(magit . "3.0.0")
   :group 'magit-buffers
   :group 'magit-commands
+  :group 'magit-diff
+  :group 'magit-log
   :type '(choice
           (const :tag "always use args from buffer" always)
           (const :tag "use args from buffer if displayed in frame" selected)
@@ -403,8 +400,6 @@ recommended value."
     (define-key map (kbd "C-c C-e") 'magit-edit-thing)
     (define-key map (kbd "C-c C-o") 'magit-browse-thing)
     (define-key map (kbd "C-c C-w") 'magit-browse-thing)
-    (define-key map (kbd "C-x a")   'magit-add-change-log-entry)
-    (define-key map (kbd "C-x 4 a") 'magit-add-change-log-entry-other-window)
     (define-key map (kbd "C-w")     'magit-copy-section-value)
     (define-key map (kbd "M-w")     'magit-copy-buffer-revision)
     (define-key map [remap previous-line]      'magit-previous-line)
@@ -516,10 +511,10 @@ which visits the thing at point using `browse-url'."
 Magit is documented in info node `(magit)'."
   :group 'magit
   (hack-dir-local-variables-non-file-buffer)
+  (face-remap-add-relative 'header-line 'magit-header-line)
   (setq mode-line-process (magit-repository-local-get 'mode-line-process))
-  (setq-local bookmark-make-record-function 'magit--make-bookmark))
-
-;;; Highlighting
+  (setq-local bookmark-make-record-function 'magit--make-bookmark)
+  (setq-local isearch-filter-predicate 'magit-section--open-temporarily))
 
 ;;; Local Variables
 
@@ -852,13 +847,13 @@ If a frame, then only consider buffers on that frame."
                  (w (window)
                     (b (window-buffer window)))
                  (f (frame)
-                    (-some #'w (window-list frame 'no-minibuf))))
+                    (seq-some #'w (window-list frame 'no-minibuf))))
         (pcase-exhaustive frame
-          (`nil                   (-some #'b (buffer-list)))
-          (`all                   (-some #'f (frame-list)))
-          (`visible               (-some #'f (visible-frame-list)))
-          ((or `selected `t)      (-some #'w (window-list (selected-frame))))
-          ((guard (framep frame)) (-some #'w (window-list frame)))))
+          (`nil                   (seq-some #'b (buffer-list)))
+          (`all                   (seq-some #'f (frame-list)))
+          (`visible               (seq-some #'f (visible-frame-list)))
+          ((or `selected `t)      (seq-some #'w (window-list (selected-frame))))
+          ((guard (framep frame)) (seq-some #'w (window-list frame)))))
     (magit--not-inside-repository-error)))
 
 (defun magit-mode-get-buffer (mode &optional create frame value)
@@ -1037,11 +1032,11 @@ Run hooks `magit-pre-refresh-hook' and `magit-post-refresh-hook'."
             (magit-run-hook-with-benchmark 'magit-post-unstage-hook)))
           (magit-run-hook-with-benchmark 'magit-post-refresh-hook)
           (when magit-refresh-verbose
-            (message "Refreshing magit...done (%.3fs, cached %s/%s)"
-                     (float-time (time-subtract (current-time) start))
-                     (caar magit--refresh-cache)
-                     (+ (caar magit--refresh-cache)
-                        (cdar magit--refresh-cache)))))
+            (let* ((c (caar magit--refresh-cache))
+                   (a (+ c (cdar magit--refresh-cache))))
+              (message "Refreshing magit...done (%.3fs, cached %s/%s (%.0f%%))"
+                       (float-time (time-subtract (current-time) start))
+                       c a (* (/ c (* a 1.0)) 100)))))
       (run-hooks 'magit-unwind-refresh-hook))))
 
 (defun magit-refresh-all ()
@@ -1265,7 +1260,8 @@ Later, when the buffer is buried, it may be restored by
 
 (defun magit-insert-xref-buttons ()
   "Insert xref buttons."
-  (when (or help-xref-stack help-xref-forward-stack)
+  (when (and (not magit-buffer-locked-p)
+             (or help-xref-stack help-xref-forward-stack))
     (when help-xref-stack
       (magit-xref-insert-button help-back-label 'magit-xref-backward))
     (when help-xref-forward-stack
@@ -1347,15 +1343,15 @@ then the value is not cached, and we return nil."
 (defun magit-repository-local-exists-p (key &optional repository)
   "Non-nil when a repository-local value exists for KEY.
 
-Returns a (KEY . value) cons cell.
+Return a (KEY . VALUE) cons cell.
 
 The KEY is matched using `equal'.
 
 Unless specified, REPOSITORY is the current buffer's repository."
-  (let* ((repokey (or repository (magit-repository-local-repository)))
-         (cache (assoc repokey magit-repository-local-cache)))
-    (and cache
-         (assoc key (cdr cache)))))
+  (when-let ((cache (assoc (or repository
+                               (magit-repository-local-repository))
+                           magit-repository-local-cache)))
+    (assoc key (cdr cache))))
 
 (defun magit-repository-local-get (key &optional default repository)
   "Return the repository-local value for KEY.
@@ -1365,21 +1361,30 @@ Return DEFAULT if no value for KEY exists.
 The KEY is matched using `equal'.
 
 Unless specified, REPOSITORY is the current buffer's repository."
-  (let ((keyvalue (magit-repository-local-exists-p key repository)))
-    (if keyvalue
-        (cdr keyvalue)
-      default)))
+  (if-let ((keyvalue (magit-repository-local-exists-p key repository)))
+      (cdr keyvalue)
+    default))
 
 (defun magit-repository-local-delete (key &optional repository)
   "Delete the repository-local value for KEY.
 
 Unless specified, REPOSITORY is the current buffer's repository."
-  (let* ((repokey (or repository (magit-repository-local-repository)))
-         (cache (assoc repokey magit-repository-local-cache)))
-    (when cache
-      ;; There is no `assoc-delete-all'.
-      (setf (cdr cache)
-            (cl-delete key (cdr cache) :key #'car :test #'equal)))))
+  (when-let ((cache (assoc (or repository
+                               (magit-repository-local-repository))
+                           magit-repository-local-cache)))
+    ;; There is no `assoc-delete-all'.
+    (setf (cdr cache)
+          (cl-delete key (cdr cache) :key #'car :test #'equal))))
+
+(defmacro magit--with-repository-local-cache (key &rest body)
+  (declare (indent 1) (debug (form body)))
+  (let ((k (cl-gensym)))
+    `(let ((,k ,key))
+       (if-let ((kv (magit-repository-local-exists-p ,k)))
+           (cdr kv)
+         (let ((v ,(macroexp-progn body)))
+           (magit-repository-local-set ,k v)
+           v)))))
 
 (defun magit-preserve-section-visibility-cache ()
   (when (derived-mode-p 'magit-status-mode 'magit-refs-mode)

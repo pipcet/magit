@@ -1,6 +1,6 @@
 ;;; magit-stash.el --- stash support for Magit  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2008-2020  The Magit Project Contributors
+;; Copyright (C) 2008-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -27,11 +27,11 @@
 
 ;;; Code:
 
-(eval-when-compile
-  (require 'subr-x))
-
 (require 'magit)
 (require 'magit-reflog)
+
+;; For `magit-stash-drop'.
+(defvar helm-comp-read-use-marked)
 
 ;;; Options
 
@@ -231,7 +231,8 @@ When the region is active offer to drop all contained stashes."
   (interactive
    (list (--if-let (magit-region-values 'stash)
              (magit-confirm 'drop-stashes nil "Drop %i stashes" nil it)
-           (magit-read-stash "Drop stash"))))
+           (let ((helm-comp-read-use-marked t))
+             (magit-read-stash "Drop stash")))))
   (dolist (stash (if (listp stash)
                      (nreverse (prog1 stash (setq stash (car stash))))
                    (list stash)))
@@ -375,11 +376,12 @@ instead of \"Stashes:\"."
   (let ((verified (magit-rev-verify ref))
         (autostash
          (and (magit-rebase-in-progress-p)
-              (magit-file-line
-               (magit-git-dir
-                (-> (if (file-directory-p (magit-git-dir "rebase-merge"))
-                        "rebase-merge/autostash"
-                      "rebase-apply/autostash")))))))
+              (thread-first
+                  (if (file-directory-p (magit-git-dir "rebase-merge"))
+                      "rebase-merge/autostash"
+                    "rebase-apply/autostash")
+                magit-git-dir
+                magit-file-line))))
     (when (or autostash verified)
       (magit-insert-section (stashes ref)
         (magit-insert-heading heading)

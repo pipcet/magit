@@ -1,6 +1,6 @@
 ;;; magit-blame.el --- blame support for Magit  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2012-2020  The Magit Project Contributors
+;; Copyright (C) 2012-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -27,9 +27,6 @@
 ;; the revision which last modified the line.
 
 ;;; Code:
-
-(eval-when-compile
-  (require 'subr-x))
 
 (require 'magit)
 
@@ -475,7 +472,9 @@ modes is toggled, then this mode also gets toggled automatically.
 
 (defun magit-blame--parse-chunk (type)
   (let (chunk revinfo)
-    (looking-at "^\\(.\\{40\\}\\) \\([0-9]+\\) \\([0-9]+\\) \\([0-9]+\\)")
+    (unless (looking-at "^\\(.\\{40\\}\\) \\([0-9]+\\) \\([0-9]+\\) \\([0-9]+\\)")
+      (error "Blaming failed due to unexpected output: %s"
+             (buffer-substring-no-properties (point) (line-end-position))))
     (with-slots (orig-rev orig-file prev-rev prev-file)
         (setq chunk (magit-blame-chunk
                      :orig-rev                     (match-string 1)
@@ -674,9 +673,10 @@ modes is toggled, then this mode also gets toggled automatically.
   (propertize
    (concat (propertize "\s" 'display '(space :height (2)))
            (propertize "\n" 'line-height t))
-   'font-lock-face (list :background
-                         (face-attribute 'magit-blame-heading
-                                         :background nil t))))
+   'font-lock-face `(:background
+                     ,(face-attribute 'magit-blame-heading
+                                      :background nil t)
+                     ,@(and (>= emacs-major-version 27) '(:extend t)))))
 
 (defun magit-blame--format-time-string (time tz)
   (let* ((time-format (or (magit-blame--style-get 'time-format)
@@ -903,7 +903,7 @@ instead of the hash, like `kill-ring-save' would."
    ("q" "Quit blaming" magit-blame-quit)]
   ["Refresh"
    :if-non-nil magit-blame-mode
-   ("c" "Cycle style" magit-blame-cycle-style)])
+   ("c" "Cycle style" magit-blame-cycle-style :transient t)])
 
 (defun magit-blame-arguments ()
   (transient-args 'magit-blame))

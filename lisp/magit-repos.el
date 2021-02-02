@@ -1,6 +1,6 @@
 ;;; magit-repos.el --- listing repositories  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2010-2020  The Magit Project Contributors
+;; Copyright (C) 2010-2021  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -28,9 +28,6 @@
 ;; mode for listing repositories in a buffer.
 
 ;;; Code:
-
-(eval-when-compile
-  (require 'subr-x))
 
 (require 'magit-core)
 
@@ -157,7 +154,10 @@ repositories are displayed."
   "Major mode for browsing a list of Git repositories."
   (setq-local x-stretch-cursor  nil)
   (setq tabulated-list-padding  0)
-  (setq tabulated-list-sort-key (cons "Path" nil))
+  (setq tabulated-list-sort-key
+        (cons (or (car (assoc "Path" magit-repolist-columns))
+                  (caar magit-repolist-columns))
+              nil))
   (setq tabulated-list-format
         (vconcat (mapcar (pcase-lambda (`(,title ,width ,_fn ,props))
                            (nconc (list title width t)
@@ -222,9 +222,9 @@ By default this indicates whether there are uncommitted changes.
 - U if there is at least one unstaged file.
 - S if there is at least one staged file.
 Only one letter is shown, the first that applies."
-  (-some (pcase-lambda (`(,fun . ,flag))
-           (and (funcall fun) flag))
-         magit-repolist-column-flag-alist))
+  (seq-some (pcase-lambda (`(,fun . ,flag))
+              (and (funcall fun) flag))
+            magit-repolist-column-flag-alist))
 
 (defun magit-repolist-column-unpulled-from-upstream (_id)
   "Insert number of upstream commits not in the current branch."
